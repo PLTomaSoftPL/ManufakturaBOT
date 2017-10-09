@@ -15,6 +15,7 @@ using Newtonsoft.Json.Linq;
 using Parameters;
 using GksKatowiceBot.Helpers;
 using System.Json;
+using Microsoft.Bot.Builder.Dialogs;
 
 namespace GksKatowiceBot
 {
@@ -36,7 +37,24 @@ namespace GksKatowiceBot
                     {
                         WebClient client = new WebClient();
 
-                        if (activity.Attachments != null)
+                        if (activity.Text != null && activity.Text.ToUpper().IndexOf("!!!ANKIETA") > -1)
+                        {
+                            try
+                            {
+                                //     int index = activity.Text.ToUpper().IndexOf("!!!ANKIETA");
+                                DataTable dt = BaseDB.DajAnkiete(Convert.ToInt32(activity.Text.ToUpper().Substring(10)));
+                                if (dt.Rows.Count > 0)
+                                {
+                                    CreateAnkieta(dt, activity.From.Id.ToString());
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+
+                            }
+                        }
+
+                        else if (activity.Attachments != null)
                         {
                             //Uri uri = new Uri(activity.Attachments[0].ContentUrl);
                             string filename = activity.Attachments[0].ContentUrl.Substring(activity.Attachments[0].ContentUrl.Length - 4, 3).Replace(".", "");
@@ -79,19 +97,17 @@ namespace GksKatowiceBot
                         }
 
                         MicrosoftAppCredentials.TrustServiceUrl(@"https://facebook.botframework.com", DateTime.MaxValue);
-                        if (komenda == "DEVELOPER_DEFINED_PAYLOAD_Pilka_Nozna" || activity.Text == "DEVELOPER_DEFINED_PAYLOAD_Pilka_Nozna")
+
+
+                        var toReply = activity.CreateReply(String.Empty);
+                        var connectorNew = new ConnectorClient(new Uri(activity.ServiceUrl));
+                        toReply.Type = ActivityTypes.Typing;
+                        await connectorNew.Conversations.SendToConversationAsync(toReply);
+
+                        if (komenda == "DEVELOPER_DEFINED_PAYLOAD_Aktualnosci" || activity.Text == "DEVELOPER_DEFINED_PAYLOAD_Aktualnosci")
                         {
-                            Parameters.Parameters.userDataStruct userStruct = new Parameters.Parameters.userDataStruct();
-                            userStruct.userName = activity.From.Name;
-                            userStruct.userId = activity.From.Id;
-                            userStruct.botName = activity.Recipient.Name;
-                            userStruct.botId = activity.Recipient.Id;
-                            userStruct.ServiceUrl = activity.ServiceUrl;
-
-                            //       BaseDB.AddToLog("UserName: " + userStruct.userName + " User Id: " + userStruct.userId + " BOtId: " + userStruct.botId + " BotName: " + userStruct.botName + " url: " + userStruct.ServiceUrl);
-                            //        BaseDB.AddUser(userStruct.userName, userStruct.userId, userStruct.botName, userStruct.botId, userStruct.ServiceUrl, 1);
-
-                            Parameters.Parameters.listaAdresow.Add(userStruct);
+                            List<IGrouping<string, string>> hrefList = new List<IGrouping<string, string>>();
+                            var attechments = BaseGETMethod.GetCardsAttachmentsAktualnosci(ref hrefList, true);
                             ConnectorClient connector = new ConnectorClient(new Uri(activity.ServiceUrl));
                             var userAccount = new ChannelAccount(name: activity.From.Name, id: activity.From.Id);
                             var botAccount = new ChannelAccount(name: activity.Recipient.Name, id: activity.Recipient.Id);
@@ -102,9 +118,81 @@ namespace GksKatowiceBot
                             {
                                 notification_type = "REGULAR",
 
+                                quick_replies = new dynamic[]
+                                   {
+                                                                                                new
+                                {
+                                    content_type = "text",
+                                    title = "Wydarzenia",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Aktualnosci",
+                                    //     image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                 //   image_url = "http://archiwum.koluszki.pl/zdjecia/naglowki_nowe/listopad%202013/pi%C5%82ka[1].png"
+                                },
+                                new
+                                {
+                                    content_type = "text",
+                                    title = "Nowości/Promocje",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Promocje",
+                                //       image_url = "https://www.samo-lepky.sk/data/11/hokej5.png"
+                                },
+                                                                new
+                                {
+                                    content_type = "text",
+                                    title = "Kultura i Sztuka",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_KulturaSztuka",
+                                //       image_url = "https://www.samo-lepky.sk/data/11/hokej5.png"
+                                },
+                                new
+                                {
+                                    content_type = "text",
+                                    title = "Rozrywka",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Rozrywka",
+                                },
+                              }
+                            });
 
-                                buttons = new dynamic[]
+
+
+
+                            message.From = botAccount;
+                            message.Recipient = userAccount;
+                            message.Conversation = new ConversationAccount(id: conversationId.Id);
+                            message.AttachmentLayout = AttachmentLayoutTypes.Carousel;
+
+                            message.Text = "Zobacz co nowego w Manufakturze :information_source:";
+                            message.Attachments = attechments;
+
+                            await connector.Conversations.SendToConversationAsync((Activity)message);
+                        }
+                        else if (komenda.Contains("DEVELOPER_DEFINED_PAYLOAD_Odpowiedz") || activity.Text.Contains("DEVELOPER_DEFINED_PAYLOAD_Odpowiedz"))
+                        {
+
+                            if (komenda.Substring(35, 1) == "1")
                             {
+
+                                Parameters.Parameters.userDataStruct userStruct = new Parameters.Parameters.userDataStruct();
+                                userStruct.userName = activity.From.Name;
+                                userStruct.userId = activity.From.Id;
+                                userStruct.botName = activity.Recipient.Name;
+                                userStruct.botId = activity.Recipient.Id;
+                                userStruct.ServiceUrl = activity.ServiceUrl;
+
+                                BaseDB.zapiszOdpowiedzi(komenda.Substring(komenda.LastIndexOf('_') + 1), 1, 0, 0, 0, 0, 0);
+
+                                Parameters.Parameters.listaAdresow.Add(userStruct);
+                                ConnectorClient connector = new ConnectorClient(new Uri(activity.ServiceUrl));
+                                var userAccount = new ChannelAccount(name: activity.From.Name, id: activity.From.Id);
+                                var botAccount = new ChannelAccount(name: activity.Recipient.Name, id: activity.Recipient.Id);
+                                connector = new ConnectorClient(new Uri(activity.ServiceUrl));
+                                var conversationId = await connector.Conversations.CreateDirectConversationAsync(botAccount, userAccount);
+                                IMessageActivity message = Activity.CreateMessageActivity();
+                                message.ChannelData = JObject.FromObject(new
+                                {
+                                    notification_type = "REGULAR",
+
+
+                                    buttons = new dynamic[]
+                                {
                             new
                         {
                                 type = "web_url",
@@ -112,12 +200,12 @@ namespace GksKatowiceBot
                                 title = "Wyniki",
                                 webview_height_ratio = "compact"
                             }
-                            },
+                                },
 
-                                quick_replies = new dynamic[]
-                                   {
+                                    quick_replies = new dynamic[]
+                            {
                                 //new
-                                //{oh
+                                //{
                                 //    content_type = "text",
                                 //    title = "Aktualności",
                                 //    payload = "DEFINED_PAYLOAD_FOR_PICKING_BLUE",
@@ -126,54 +214,222 @@ namespace GksKatowiceBot
                                 new
                                 {
                                     content_type = "text",
-                                    title = "Aktualności",
-                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Pilka_NoznaAktualnosci",
+                                    title = "Dla mieszkańców",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_DlaMieszkancow",
+                                    //     image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                            //        image_url = "http://archiwum.koluszki.pl/zdjecia/naglowki_nowe/listopad%202013/pi%C5%82ka[1].png"
+                                },
+                                new
+                                {
+                                    content_type = "text",
+                                    title = "Dla turystów",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_DlaTurystow",
+                       //             image_url = "https://gim7bytom.edupage.org/global/pics/iconspro/sport/volleyball.png"
+                                },                                new
+                                {
+                                    content_type = "text",
+                                    title = "Dla inwestorów",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_DlaInwestorow",
+                                //       image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                },
+                                                           }
+                                });
+
+
+                                message.From = botAccount;
+                                message.Recipient = userAccount;
+                                message.Conversation = new ConversationAccount(id: conversationId.Id);
+                                message.Text = "Super dziękuję za oddanie głosu :)";
+                                await connector.Conversations.SendToConversationAsync((Activity)message);
+                            }
+                        }
+                        else if (komenda == "DEVELOPER_DEFINED_PAYLOAD_POWIADOMIENIA" || activity.Text == "DEVELOPER_DEFINED_PAYLOAD_POWIADOMIENIA" || activity.Text == "Powiadomienia")
+                        {
+                            ConnectorClient connector = new ConnectorClient(new Uri(activity.ServiceUrl));
+                            var userAccount = new ChannelAccount(name: activity.From.Name, id: activity.From.Id);
+                            var botAccount = new ChannelAccount(name: activity.Recipient.Name, id: activity.Recipient.Id);
+                            connector = new ConnectorClient(new Uri(activity.ServiceUrl));
+                            var conversationId = await connector.Conversations.CreateDirectConversationAsync(botAccount, userAccount);
+                            IMessageActivity message = Activity.CreateMessageActivity();
+                            byte czyPowiadomienia = BaseDB.czyPowiadomienia(userAccount.Id);
+                            if (czyPowiadomienia == 0)
+                            {
+                                message.Text = "Opcja automatycznych, powiadomień o aktualnościach  jest włączona. Jeśli nie chcesz otrzymywać powiadomień  możesz je wyłączyć.";
+                                message.ChannelData = JObject.FromObject(new
+                                {
+                                    notification_type = "REGULAR",
+                                    //buttons = new dynamic[]
+                                    // {
+                                    //     new
+                                    //     {
+                                    //    type ="postback",
+                                    //    title="Tytul",
+                                    //    vslue = "tytul",
+                                    //    payload="DEVELOPER_DEFINED_PAYLOAD"
+                                    //     }
+                                    // },
+                                    quick_replies = new dynamic[]
+                                           {
+                                //new
+                                //{
+                                //    content_type = "text",
+                                //    title = "Aktualności",
+                                //    payload = "DEFINED_PAYLOAD_FOR_PICKING_BLUE",
+                                //    image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Blue%20Ball.png"
+                                //},
+                                //new
+                                //{
+                                //    content_type = "text",
+                                //    title = "Aktualności",
+                                //    payload = "DEVELOPER_DEFINED_PAYLOAD_Aktualności",
+                                ////       image_url = "https://www.samo-lepky.sk/data/11/hokej5.png"
+                                //},
+                                new
+                                {
+                                    content_type = "text",
+                                    title = "Wyłącz powiadomienia",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_PowiadomieniaWylacz",
+                                    //     image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                 //   image_url = "http://archiwum.koluszki.pl/zdjecia/naglowki_nowe/listopad%202013/pi%C5%82ka[1].png"
+                                },
+                                               //new
+                                               //{
+                                               //    content_type = "text",
+                                               //    title = "Włącz",
+                                               //    payload = "DEVELOPER_DEFINED_PAYLOAD_PowiadomieniaWlacz",
+                                               //   //   image_url = "https://gim7bytom.edupage.org/global/pics/iconspro/sport/volleyball.png"
+                                               //},
+
+                                           }
+                                });
+                            }
+                            else if (czyPowiadomienia == 1)
+                            {
+                                message.Text = "Opcja automatycznych, codziennych  powiadomień o aktualnościach jest wyłączona. Jeśli chcesz otrzymywać powiadomienia możesz je włączyć.";
+                                message.ChannelData = JObject.FromObject(new
+                                {
+                                    notification_type = "REGULAR",
+                                    //buttons = new dynamic[]
+                                    // {
+                                    //     new
+                                    //     {
+                                    //    type ="postback",
+                                    //    title="Tytul",
+                                    //    vslue = "tytul",
+                                    //    payload="DEVELOPER_DEFINED_PAYLOAD"
+                                    //     }
+                                    // },
+                                    quick_replies = new dynamic[]
+           {
+                                //new
+                                //{
+                                //    content_type = "text",
+                                //    title = "Aktualności",
+                                //    payload = "DEFINED_PAYLOAD_FOR_PICKING_BLUE",
+                                //    image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Blue%20Ball.png"
+                                //},
+                                //new
+                                //{
+                                //    content_type = "text",
+                                //    title = "Aktualności",
+                                //    payload = "DEVELOPER_DEFINED_PAYLOAD_Aktualności",
+                                ////       image_url = "https://www.samo-lepky.sk/data/11/hokej5.png"
+                                //},
+                                //new
+                                //{
+                                //    content_type = "text",
+                                //    title = "Wyłącz",
+                                //    payload = "DEVELOPER_DEFINED_PAYLOAD_PowiadomieniaWylacz",
+                                //    //     image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                // //   image_url = "http://archiwum.koluszki.pl/zdjecia/naglowki_nowe/listopad%202013/pi%C5%82ka[1].png"
+                                //},
+                                new
+                                {
+                                    content_type = "text",
+                                    title = "Włącz powiadomienia",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_PowiadomieniaWlacz",
+                                   //   image_url = "https://gim7bytom.edupage.org/global/pics/iconspro/sport/volleyball.png"
+                                },
+
+           }
+                                });
+                            }
+                            message.From = botAccount;
+                            message.Recipient = userAccount;
+                            message.Conversation = new ConversationAccount(id: conversationId.Id);
+                            message.AttachmentLayout = AttachmentLayoutTypes.Carousel;
+                            List<IGrouping<string, string>> hrefList = new List<IGrouping<string, string>>();
+                            //    message.Attachments = BaseGETMethod.GetCardsAttachmentsNajnowsze(ref hrefList, true);
+                            //     message.Text = "W kazdej chwili możesz włączyć lub wyłączyć otrzymywanie powiadomień na swojego Messengera. Co chcesz zrobić z powiadomieniami? ";
+                            await connector.Conversations.SendToConversationAsync((Activity)message);
+                        }
+
+                        else if (komenda == "DEVELOPER_DEFINED_PAYLOAD_PowiadomieniaWylacz" || activity.Text == "DEVELOPER_DEFINED_PAYLOAD_PowiadomieniaWylacz" || activity.Text == "Wyłącz")
+                        {
+                            ConnectorClient connector = new ConnectorClient(new Uri(activity.ServiceUrl));
+                            var userAccount = new ChannelAccount(name: activity.From.Name, id: activity.From.Id);
+                            var botAccount = new ChannelAccount(name: activity.Recipient.Name, id: activity.Recipient.Id);
+                            connector = new ConnectorClient(new Uri(activity.ServiceUrl));
+                            var conversationId = await connector.Conversations.CreateDirectConversationAsync(botAccount, userAccount);
+                            IMessageActivity message = Activity.CreateMessageActivity();
+
+                            message.ChannelData = JObject.FromObject(new
+                            {
+                                notification_type = "REGULAR",
+                                //buttons = new dynamic[]
+                                // {
+                                //     new
+                                //     {
+                                //    type ="postback",
+                                //    title="Tytul",
+                                //    vslue = "tytul",
+                                //    payload="DEVELOPER_DEFINED_PAYLOAD"
+                                //     }
+                                // },
+                                quick_replies = new dynamic[]
+                                   {
+                                                                                                new
+                                {
+                                    content_type = "text",
+                                    title = "Wydarzenia",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Aktualnosci",
                                     //     image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
                                  //   image_url = "http://archiwum.koluszki.pl/zdjecia/naglowki_nowe/listopad%202013/pi%C5%82ka[1].png"
                                 },
                                 new
                                 {
                                     content_type = "text",
-                                    title = "Galeria",
-                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Pilka_NoznaGaleria",
-                               //       image_url = "https://gim7bytom.edupage.org/global/pics/iconspro/sport/volleyball.png"
-                                },
-                                new
-                                {
-                                    content_type = "text",
-                                    title = "Video",
-                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Pilka_NoznaVideo",
+                                    title = "Nowości/Promocje",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Promocje",
                                 //       image_url = "https://www.samo-lepky.sk/data/11/hokej5.png"
                                 },
-                                                                   }
+                                                                new
+                                {
+                                    content_type = "text",
+                                    title = "Kultura i Sztuka",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_KulturaSztuka",
+                                //       image_url = "https://www.samo-lepky.sk/data/11/hokej5.png"
+                                },
+                                new
+                                {
+                                    content_type = "text",
+                                    title = "Rozrywka",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Rozrywka",
+                                },
+                              }
                             });
-
-
                             message.From = botAccount;
                             message.Recipient = userAccount;
                             message.Conversation = new ConversationAccount(id: conversationId.Id);
                             message.AttachmentLayout = AttachmentLayoutTypes.Carousel;
                             List<IGrouping<string, string>> hrefList = new List<IGrouping<string, string>>();
-
-                            //    message.Attachments = BaseGETMethod.GetCardsAttachments(ref hrefList, true);
-
+                            //  message.Attachments = BaseGETMethod.GetCardsAttachmentsNajnowsze(ref hrefList, true);
+                            message.Text = "Zrozumiałem, wyłączyłem automatyczne, codzienne powiadomienia o aktualnościach.";
+                            BaseDB.ChangeNotification(Convert.ToInt64(userAccount.Id), 1);
                             await connector.Conversations.SendToConversationAsync((Activity)message);
                         }
-
-                        else
-                                if (activity.Text == "USER_DEFINED_PAYLOAD")
+                        else if (komenda == "DEVELOPER_DEFINED_PAYLOAD_PowiadomieniaWlacz" || activity.Text == "DEVELOPER_DEFINED_PAYLOAD_PowiadomieniaWlacz" || activity.Text == "Wyłącz")
                         {
-                            Parameters.Parameters.userDataStruct userStruct = new Parameters.Parameters.userDataStruct();
-                            userStruct.userName = activity.From.Name;
-                            userStruct.userId = activity.From.Id;
-                            userStruct.botName = activity.Recipient.Name;
-                            userStruct.botId = activity.Recipient.Id;
-                            userStruct.ServiceUrl = activity.ServiceUrl;
-
-                            //           BaseDB.AddToLog("UserName: " + userStruct.userName + " User Id: " + userStruct.userId + " BOtId: " + userStruct.botId + " BotName: " + userStruct.botName + " url: " + userStruct.ServiceUrl);
-                            BaseDB.AddUser(userStruct.userName, userStruct.userId, userStruct.botName, userStruct.botId, userStruct.ServiceUrl, 1);
-
-                            Parameters.Parameters.listaAdresow.Add(userStruct);
                             ConnectorClient connector = new ConnectorClient(new Uri(activity.ServiceUrl));
                             var userAccount = new ChannelAccount(name: activity.From.Name, id: activity.From.Id);
                             var botAccount = new ChannelAccount(name: activity.Recipient.Name, id: activity.Recipient.Id);
@@ -195,226 +451,599 @@ namespace GksKatowiceBot
                                 //     }
                                 // },
                                 quick_replies = new dynamic[]
-                            {
-                                //new
-                                //{
-                                //    content_type = "text",
-                                //    title = "Aktualności",
-                                //    payload = "DEFINED_PAYLOAD_FOR_PICKING_BLUE",
-                                //    image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Blue%20Ball.png"
-                                //},
-                                new
+                                   {
+                                                                                                new
                                 {
                                     content_type = "text",
-                                    title = "Piłka nożna",
-                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Pilka_Nozna",
+                                    title = "Wydarzenia",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Aktualnosci",
                                     //     image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
-                            //        image_url = "http://archiwum.koluszki.pl/zdjecia/naglowki_nowe/listopad%202013/pi%C5%82ka[1].png"
+                                 //   image_url = "http://archiwum.koluszki.pl/zdjecia/naglowki_nowe/listopad%202013/pi%C5%82ka[1].png"
                                 },
                                 new
                                 {
                                     content_type = "text",
-                                    title = "Siatkówka",
-                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Siatkowka",
-                       //             image_url = "https://gim7bytom.edupage.org/global/pics/iconspro/sport/volleyball.png"
-                                },                                new
+                                    title = "Nowości/Promocje",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Promocje",
+                                //       image_url = "https://www.samo-lepky.sk/data/11/hokej5.png"
+                                },
+                                                                new
                                 {
                                     content_type = "text",
-                                    title = "Hokej",
-                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Hokej",
-                                //       image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                    title = "Kultura i Sztuka",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_KulturaSztuka",
+                                //       image_url = "https://www.samo-lepky.sk/data/11/hokej5.png"
                                 },
-                                                           }
+                                new
+                                {
+                                    content_type = "text",
+                                    title = "Rozrywka",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Rozrywka",
+                                },
+                              }
                             });
-
-
                             message.From = botAccount;
                             message.Recipient = userAccount;
                             message.Conversation = new ConversationAccount(id: conversationId.Id);
                             message.AttachmentLayout = AttachmentLayoutTypes.Carousel;
                             List<IGrouping<string, string>> hrefList = new List<IGrouping<string, string>>();
-                            message.Text = @"Cześć
-Jestem BOTem, Twoim asystentem do kontaktu ze stronami internetowymi klubu GKS Katowice. Raz dziennie powiadomię Cię o aktualnościach w poszczególnych sekcjach sportowych. Ponadto spodziewaj się powiadomień w formie komunikatów, bądź innych informacji przekazywanych przez moderatora.   
-";
-                            // message.Attachments = GetCardsAttachments(ref hrefList, true);
-
-                            await connector.Conversations.SendToConversationAsync((Activity)message);
-
-                            message.Text = @"Współpraca między nami jest bardzo prosta.Wydajesz mi polecenia, a ja za Ciebie wykonuje robotę.
-Zaznacz tylko w rozwijanym menu lub skorzystaj z podpowiedzi, która sekcja cię interesuje, a ja automatycznie połączę Cię z aktualnościami z wybranej sekcji.
-";
-
+                            //  message.Attachments = BaseGETMethod.GetCardsAttachmentsNajnowsze(ref hrefList, true);
+                            message.Text = "Zrozumiałem, włączyłem automatyczne, codzienne powiadomienia o aktualnościach.";
+                            BaseDB.ChangeNotification(Convert.ToInt64(userAccount.Id), 0);
                             await connector.Conversations.SendToConversationAsync((Activity)message);
                         }
-                        else
-                                if (activity.Text == "DEVELOPER_DEFINED_PAYLOAD_HELP")
+
+                        else if (komenda == "<GET_STARTED_PAYLOAD>" || activity.Text == "<GET_STARTED_PAYLOAD>" || activity.Text == "Rozpocznij" || activity.Text == "Get Started")
                         {
-                            Parameters.Parameters.userDataStruct userStruct = new Parameters.Parameters.userDataStruct();
-                            userStruct.userName = activity.From.Name;
-                            userStruct.userId = activity.From.Id;
-                            userStruct.botName = activity.Recipient.Name;
-                            userStruct.botId = activity.Recipient.Id;
-                            userStruct.ServiceUrl = activity.ServiceUrl;
-
-                            //               BaseDB.AddToLog("UserName: " + userStruct.userName + " User Id: " + userStruct.userId + " BOtId: " + userStruct.botId + " BotName: " + userStruct.botName + " url: " + userStruct.ServiceUrl);
-                            //                 BaseDB.AddUser(userStruct.userName, userStruct.userId, userStruct.botName, userStruct.botId, userStruct.ServiceUrl, 1);
-
-                            Parameters.Parameters.listaAdresow.Add(userStruct);
                             ConnectorClient connector = new ConnectorClient(new Uri(activity.ServiceUrl));
                             var userAccount = new ChannelAccount(name: activity.From.Name, id: activity.From.Id);
                             var botAccount = new ChannelAccount(name: activity.Recipient.Name, id: activity.Recipient.Id);
                             connector = new ConnectorClient(new Uri(activity.ServiceUrl));
                             var conversationId = await connector.Conversations.CreateDirectConversationAsync(botAccount, userAccount);
                             IMessageActivity message = Activity.CreateMessageActivity();
-
                             message.ChannelData = JObject.FromObject(new
                             {
                                 notification_type = "REGULAR",
-                                //buttons = new dynamic[]
-                                // {
-                                //     new
-                                //     {
-                                //    type ="postback",
-                                //    title="Tytul",
-                                //    vslue = "tytul",
-                                //    payload="DEVELOPER_DEFINED_PAYLOAD"
-                                //     }
-                                // },
+
                                 quick_replies = new dynamic[]
-                            {
-                                //new
-                                //{
-                                //    content_type = "text",
-                                //    title = "Aktualności",
-                                //    payload = "DEFINED_PAYLOAD_FOR_PICKING_BLUE",
-                                //    image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Blue%20Ball.png"
-                                //},
-                                new
+                                   {
+                                                                                                new
                                 {
                                     content_type = "text",
-                                    title = "Piłka nożna",
-                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Pilka_Nozna",
+                                    title = "Wydarzenia",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Aktualnosci",
                                     //     image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
-                            //        image_url = "http://archiwum.koluszki.pl/zdjecia/naglowki_nowe/listopad%202013/pi%C5%82ka[1].png"
+                                 //   image_url = "http://archiwum.koluszki.pl/zdjecia/naglowki_nowe/listopad%202013/pi%C5%82ka[1].png"
                                 },
                                 new
                                 {
                                     content_type = "text",
-                                    title = "Siatkówka",
-                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Siatkowka",
-                       //             image_url = "https://gim7bytom.edupage.org/global/pics/iconspro/sport/volleyball.png"
-                                },                                new
+                                    title = "Nowości/Promocje",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Promocje",
+                                //       image_url = "https://www.samo-lepky.sk/data/11/hokej5.png"
+                                },
+                                                                new
                                 {
                                     content_type = "text",
-                                    title = "Hokej",
-                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Hokej",
-                                //       image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                    title = "Kultura i Sztuka",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_KulturaSztuka",
+                                //       image_url = "https://www.samo-lepky.sk/data/11/hokej5.png"
                                 },
-                                                           }
+                                new
+                                {
+                                    content_type = "text",
+                                    title = "Rozrywka",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Rozrywka",
+                                },
+                              }
                             });
+
 
 
                             message.From = botAccount;
                             message.Recipient = userAccount;
                             message.Conversation = new ConversationAccount(id: conversationId.Id);
                             message.AttachmentLayout = AttachmentLayoutTypes.Carousel;
-                            List<IGrouping<string, string>> hrefList = new List<IGrouping<string, string>>();
-                            message.Text = @"Cześć
-Jestem BOTem, Twoim asystentem do kontaktu ze stronami internetowymi klubu GKS Katowice. Raz dziennie powiadomię Cię o aktualnościach w poszczególnych sekcjach sportowych. Ponadto spodziewaj się powiadomień w formie komunikatów, bądź innych informacji przekazywanych przez moderatora.   
-";
-                            // message.Attachments = GetCardsAttachments(ref hrefList, true);
 
-                            await connector.Conversations.SendToConversationAsync((Activity)message);
 
-                            message.Text = @"Współpraca między nami jest bardzo prosta.Wydajesz mi polecenia, a ja za Ciebie wykonuje robotę.
-Zaznacz tylko w rozwijanym menu lub skorzystaj z podpowiedzi, która sekcja cię interesuje, a ja automatycznie połączę Cię z aktualnościami z wybranej sekcji.
-";
-
+                            message.Text = "Cześć  " + userAccount.Name.Substring(0, userAccount.Name.IndexOf(" ")) + " , jestem wirtualnym asystenetem do kontaktu z galerią Manufaktura :sunglasses: Z moją pomocą dowiesz się o wszystkim co najważniejsze w naszej galerii, raz w tygodniu mogę powiadomić Cie o wydarzeniach i promocjach. Postaram się również udzielić odpowiedzi na Twoje pytania :) ";
+                            BaseDB.AddUser(userAccount.Name, userAccount.Id, botAccount.Name, botAccount.Id, "https://facebook.botframework.com", 0);
                             await connector.Conversations.SendToConversationAsync((Activity)message);
                         }
-
-
-
-                        else
+                        else if (komenda == "DEVELOPER_DEFINED_PAYLOAD_Promocje" || activity.Text == "DEVELOPER_DEFINED_PAYLOAD_Promocje")
                         {
-                            Parameters.Parameters.userDataStruct userStruct = new Parameters.Parameters.userDataStruct();
-                            userStruct.userName = activity.From.Name;
-                            userStruct.userId = activity.From.Id;
-                            userStruct.botName = activity.Recipient.Name;
-                            userStruct.botId = activity.Recipient.Id;
-                            userStruct.ServiceUrl = activity.ServiceUrl;
-
-                            //    BaseDB.AddToLog("UserName: " + userStruct.userName + " User Id: " + userStruct.userId + " BOtId: " + userStruct.botId + " BotName: " + userStruct.botName + " url: " + userStruct.ServiceUrl);
-                            //             BaseDB.AddUser(userStruct.userName, userStruct.userId, userStruct.botName, userStruct.botId, userStruct.ServiceUrl, 1);
-
-                            Parameters.Parameters.listaAdresow.Add(userStruct);
+                            List<IGrouping<string, string>> hrefList = new List<IGrouping<string, string>>();
+                            var attechments = BaseGETMethod.GetCardsAttachmentsPromocje(ref hrefList, true);
                             ConnectorClient connector = new ConnectorClient(new Uri(activity.ServiceUrl));
                             var userAccount = new ChannelAccount(name: activity.From.Name, id: activity.From.Id);
                             var botAccount = new ChannelAccount(name: activity.Recipient.Name, id: activity.Recipient.Id);
                             connector = new ConnectorClient(new Uri(activity.ServiceUrl));
                             var conversationId = await connector.Conversations.CreateDirectConversationAsync(botAccount, userAccount);
                             IMessageActivity message = Activity.CreateMessageActivity();
-
                             message.ChannelData = JObject.FromObject(new
                             {
                                 notification_type = "REGULAR",
-                                //buttons = new dynamic[]
-                                // {
-                                //     new
-                                //     {
-                                //    type ="postback",
-                                //    title="Tytul",
-                                //    vslue = "tytul",
-                                //    payload="DEVELOPER_DEFINED_PAYLOAD"
-                                //     }
-                                // },
-                                quick_replies = new dynamic[]
-                            {
-                                //new
-                                //{
-                                //    content_type = "text",
-                                //    title = "Aktualności",
-                                //    payload = "DEFINED_PAYLOAD_FOR_PICKING_BLUE",
-                                //    image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Blue%20Ball.png"
-                                //},
-                                new
-                                {
-                                    content_type = "text",
-                                    title = "Piłka nożna",
-                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Pilka_Nozna",
-                                    //     image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
-                                   // image_url = "http://archiwum.koluszki.pl/zdjecia/naglowki_nowe/listopad%202013/pi%C5%82ka[1].png"
-                                },
-                                new
-                                {
-                                    content_type = "text",
-                                    title = "Siatkówka",
-                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Siatkowka",
-                           //         image_url = "https://gim7bytom.edupage.org/global/pics/iconspro/sport/volleyball.png"
-                                },                                new
-                                {
-                                    content_type = "text",
-                                    title = "Hokej",
-                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Hokej",
-                                //       image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
-                                },
-                                                           }
-                            });
 
+                                quick_replies = new dynamic[]
+                                   {
+                                                                                                new
+                                {
+                                    content_type = "text",
+                                    title = "Wydarzenia",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Aktualnosci",
+                                    //     image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                 //   image_url = "http://archiwum.koluszki.pl/zdjecia/naglowki_nowe/listopad%202013/pi%C5%82ka[1].png"
+                                },
+                                new
+                                {
+                                    content_type = "text",
+                                    title = "Nowości/Promocje",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Promocje",
+                                //       image_url = "https://www.samo-lepky.sk/data/11/hokej5.png"
+                                },
+                                                                new
+                                {
+                                    content_type = "text",
+                                    title = "Kultura i Sztuka",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_KulturaSztuka",
+                                //       image_url = "https://www.samo-lepky.sk/data/11/hokej5.png"
+                                },
+                                new
+                                {
+                                    content_type = "text",
+                                    title = "Rozrywka",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Rozrywka",
+                                },
+                              }
+                            });
 
                             message.From = botAccount;
                             message.Recipient = userAccount;
                             message.Conversation = new ConversationAccount(id: conversationId.Id);
                             message.AttachmentLayout = AttachmentLayoutTypes.Carousel;
-                            List<IGrouping<string, string>> hrefList = new List<IGrouping<string, string>>();
-                            message.Text = "Wybierz jedną z opcji";
-                            // message.Attachments = BaseGETMethod.GetCardsAttachmentsGallery(ref hrefList, true);
+
+                            message.Text = "Sprawdź promocje w naszych sklepach :sunglasses:";
+                            message.Attachments = attechments;
 
                             await connector.Conversations.SendToConversationAsync((Activity)message);
                         }
+                        else if (komenda == "DEVELOPER_DEFINED_PAYLOAD_KulturaSztuka" || activity.Text == "DEVELOPER_DEFINED_PAYLOAD_KulturaSztuka")
+                        {
+                            List<IGrouping<string, string>> hrefList = new List<IGrouping<string, string>>();
+                            var attechments = BaseGETMethod.GetCardsAttachmentsKulturaSztuka(ref hrefList, true);
+                            ConnectorClient connector = new ConnectorClient(new Uri(activity.ServiceUrl));
+                            var userAccount = new ChannelAccount(name: activity.From.Name, id: activity.From.Id);
+                            var botAccount = new ChannelAccount(name: activity.Recipient.Name, id: activity.Recipient.Id);
+                            connector = new ConnectorClient(new Uri(activity.ServiceUrl));
+                            var conversationId = await connector.Conversations.CreateDirectConversationAsync(botAccount, userAccount);
+                            IMessageActivity message = Activity.CreateMessageActivity();
+                            message.ChannelData = JObject.FromObject(new
+                            {
+                                notification_type = "REGULAR",
+
+                                quick_replies = new dynamic[]
+                                   {
+                                                                                                new
+                                {
+                                    content_type = "text",
+                                    title = "Wydarzenia",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Aktualnosci",
+                                    //     image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                 //   image_url = "http://archiwum.koluszki.pl/zdjecia/naglowki_nowe/listopad%202013/pi%C5%82ka[1].png"
+                                },
+                                new
+                                {
+                                    content_type = "text",
+                                    title = "Nowości/Promocje",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Promocje",
+                                //       image_url = "https://www.samo-lepky.sk/data/11/hokej5.png"
+                                },
+                                                                new
+                                {
+                                    content_type = "text",
+                                    title = "Kultura i Sztuka",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_KulturaSztuka",
+                                //       image_url = "https://www.samo-lepky.sk/data/11/hokej5.png"
+                                },
+                                new
+                                {
+                                    content_type = "text",
+                                    title = "Rozrywka",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Rozrywka",
+                                },
+                              }
+                            });
+                            message.From = botAccount;
+                            message.Recipient = userAccount;
+                            message.Conversation = new ConversationAccount(id: conversationId.Id);
+                            message.AttachmentLayout = AttachmentLayoutTypes.Carousel;
+
+                            message.Text = "Sprawdź co nowego w kulturze i sztuce :)";
+                            message.Attachments = attechments;
+
+                            await connector.Conversations.SendToConversationAsync((Activity)message);
+                        }
+                        else if (komenda == "DEVELOPER_DEFINED_PAYLOAD_Rozrywka" || activity.Text == "DEVELOPER_DEFINED_PAYLOAD_Rozrywka")
+                        {
+                            List<IGrouping<string, string>> hrefList = new List<IGrouping<string, string>>();
+                            var attechments = BaseGETMethod.GetCardsAttachmentsRozrywka(ref hrefList, true);
+                            ConnectorClient connector = new ConnectorClient(new Uri(activity.ServiceUrl));
+                            var userAccount = new ChannelAccount(name: activity.From.Name, id: activity.From.Id);
+                            var botAccount = new ChannelAccount(name: activity.Recipient.Name, id: activity.Recipient.Id);
+                            connector = new ConnectorClient(new Uri(activity.ServiceUrl));
+                            var conversationId = await connector.Conversations.CreateDirectConversationAsync(botAccount, userAccount);
+                            IMessageActivity message = Activity.CreateMessageActivity();
+                            message.ChannelData = JObject.FromObject(new
+                            {
+                                notification_type = "REGULAR",
+
+                                quick_replies = new dynamic[]
+                                   {
+                                                                                                new
+                                {
+                                    content_type = "text",
+                                    title = "Wydarzenia",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Aktualnosci",
+                                    //     image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                 //   image_url = "http://archiwum.koluszki.pl/zdjecia/naglowki_nowe/listopad%202013/pi%C5%82ka[1].png"
+                                },
+                                new
+                                {
+                                    content_type = "text",
+                                    title = "Nowości/Promocje",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Promocje",
+                                //       image_url = "https://www.samo-lepky.sk/data/11/hokej5.png"
+                                },
+                                                                new
+                                {
+                                    content_type = "text",
+                                    title = "Kultura i Sztuka",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_KulturaSztuka",
+                                //       image_url = "https://www.samo-lepky.sk/data/11/hokej5.png"
+                                },
+                                new
+                                {
+                                    content_type = "text",
+                                    title = "Rozrywka",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Rozrywka",
+                                },
+                              }
+                            });
+
+                            message.From = botAccount;
+                            message.Recipient = userAccount;
+                            message.Conversation = new ConversationAccount(id: conversationId.Id);
+                            message.AttachmentLayout = AttachmentLayoutTypes.Carousel;
+
+                            message.Text = "Manufaktura - miejsce pełne rozrywki :heartpulse:";
+                            message.Attachments = attechments;
+
+                            await connector.Conversations.SendToConversationAsync((Activity)message);
+                        }
+                        else
+                        {
+
+                            List<IGrouping<string, string>> hrefList = new List<IGrouping<string, string>>();
+                            var sklepy = BaseGETMethod.GetCardsAttachmentsSklepy(ref hrefList, false, activity.Text);
+                            if (sklepy.Count() > 0)
+                            {
+                                try
+                                {
+                                    ConnectorClient connector = new ConnectorClient(new Uri(activity.ServiceUrl));
+                                    var userAccount = new ChannelAccount(name: activity.From.Name, id: activity.From.Id);
+                                    var botAccount = new ChannelAccount(name: activity.Recipient.Name, id: activity.Recipient.Id);
+                                    connector = new ConnectorClient(new Uri(activity.ServiceUrl));
+                                    var conversationId = await connector.Conversations.CreateDirectConversationAsync(botAccount, userAccount);
+                                    IMessageActivity message = Activity.CreateMessageActivity();
+                                    message.ChannelData = JObject.FromObject(new
+                                    {
+                                        notification_type = "REGULAR",
+
+                                        quick_replies = new dynamic[]
+                                   {
+                                                                                                new
+                                {
+                                    content_type = "text",
+                                    title = "Wydarzenia",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Aktualnosci",
+                                    //     image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                 //   image_url = "http://archiwum.koluszki.pl/zdjecia/naglowki_nowe/listopad%202013/pi%C5%82ka[1].png"
+                                },
+                                new
+                                {
+                                    content_type = "text",
+                                    title = "Nowości/Promocje",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Promocje",
+                                //       image_url = "https://www.samo-lepky.sk/data/11/hokej5.png"
+                                },
+                                                                new
+                                {
+                                    content_type = "text",
+                                    title = "Kultura i Sztuka",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_KulturaSztuka",
+                                //       image_url = "https://www.samo-lepky.sk/data/11/hokej5.png"
+                                },
+                                new
+                                {
+                                    content_type = "text",
+                                    title = "Rozrywka",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Rozrywka",
+                                },
+                              }
+                                    });
+
+
+                                    message.From = botAccount;
+                                    message.Recipient = userAccount;
+                                    message.Conversation = new ConversationAccount(id: conversationId.Id);
+                                    message.AttachmentLayout = AttachmentLayoutTypes.Carousel;
+                                    message.Text = "W sprawach związanych z konkretnym sklepem prosimy o sprawdzenie na stronie sklepu lub kontakt telefoniczny ze sklepem. Wszelkie informacje znajdziesz na stronach poniżej";
+                                    message.Attachments = sklepy;
+                                    // message.Text = "Niestety nie znalazłem informacji na ten temat. Skorzystaj z podpowiedzi.";
+
+                                    await connector.Conversations.SendToConversationAsync((Activity)message);
+
+                                }
+                                catch (Exception ex)
+                                {
+                                    BaseDB.AddToLog("Błąd wysywania informacji o sklepie: " + ex);
+                                }
+                            }
+                            else
+                            {
+                                var szablony = BaseGETMethod.GetCardsAttachmentsSprawdzSzablon(ref hrefList, false, activity.Text);
+                                if (szablony.Rows.Count > 0)
+                                {
+
+
+                                    if (szablony.Rows.Count == 1)
+                                    {
+                                        try
+                                        {
+                                            ConnectorClient connector = new ConnectorClient(new Uri(activity.ServiceUrl));
+                                            var userAccount = new ChannelAccount(name: activity.From.Name, id: activity.From.Id);
+                                            var botAccount = new ChannelAccount(name: activity.Recipient.Name, id: activity.Recipient.Id);
+                                            connector = new ConnectorClient(new Uri(activity.ServiceUrl));
+                                            var conversationId = await connector.Conversations.CreateDirectConversationAsync(botAccount, userAccount);
+                                            IMessageActivity message = Activity.CreateMessageActivity();
+                                            message.ChannelData = JObject.FromObject(new
+                                            {
+                                                notification_type = "REGULAR",
+
+                                                quick_replies = new dynamic[]
+                                   {
+                                                                                                new
+                                {
+                                    content_type = "text",
+                                    title = "Wydarzenia",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Aktualnosci",
+                                    //     image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                 //   image_url = "http://archiwum.koluszki.pl/zdjecia/naglowki_nowe/listopad%202013/pi%C5%82ka[1].png"
+                                },
+                                new
+                                {
+                                    content_type = "text",
+                                    title = "Nowości/Promocje",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Promocje",
+                                //       image_url = "https://www.samo-lepky.sk/data/11/hokej5.png"
+                                },
+                                                                new
+                                {
+                                    content_type = "text",
+                                    title = "Kultura i Sztuka",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_KulturaSztuka",
+                                //       image_url = "https://www.samo-lepky.sk/data/11/hokej5.png"
+                                },
+                                new
+                                {
+                                    content_type = "text",
+                                    title = "Rozrywka",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Rozrywka",
+                                },
+                              }
+                                            });
+
+
+                                            message.From = botAccount;
+                                            message.Recipient = userAccount;
+                                            message.Conversation = new ConversationAccount(id: conversationId.Id);
+                                            message.AttachmentLayout = AttachmentLayoutTypes.Carousel;
+                                            message.Text = szablony.Rows[0]["Odpowiedz"].ToString();
+
+
+                                            await connector.Conversations.SendToConversationAsync((Activity)message);
+
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            BaseDB.AddToLog("Błąd wysywania informacji o sklepie: " + ex);
+                                        }
+                                    }
+
+                                    else
+                                    {
+                                        try
+                                        {
+                                            ConnectorClient connector = new ConnectorClient(new Uri(activity.ServiceUrl));
+                                            var userAccount = new ChannelAccount(name: activity.From.Name, id: activity.From.Id);
+                                            var botAccount = new ChannelAccount(name: activity.Recipient.Name, id: activity.Recipient.Id);
+                                            connector = new ConnectorClient(new Uri(activity.ServiceUrl));
+                                            var conversationId = await connector.Conversations.CreateDirectConversationAsync(botAccount, userAccount);
+                                            IMessageActivity message = Activity.CreateMessageActivity();
+                                            message.ChannelData = JObject.FromObject(new
+                                            {
+                                                notification_type = "REGULAR",
+
+                                                quick_replies = new dynamic[]
+                                   {
+                                                                                                new
+                                {
+                                    content_type = "text",
+                                    title = "Wydarzenia",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Aktualnosci",
+                                    //     image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                 //   image_url = "http://archiwum.koluszki.pl/zdjecia/naglowki_nowe/listopad%202013/pi%C5%82ka[1].png"
+                                },
+                                new
+                                {
+                                    content_type = "text",
+                                    title = "Nowości/Promocje",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Promocje",
+                                //       image_url = "https://www.samo-lepky.sk/data/11/hokej5.png"
+                                },
+                                                                new
+                                {
+                                    content_type = "text",
+                                    title = "Kultura i Sztuka",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_KulturaSztuka",
+                                //       image_url = "https://www.samo-lepky.sk/data/11/hokej5.png"
+                                },
+                                new
+                                {
+                                    content_type = "text",
+                                    title = "Rozrywka",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Rozrywka",
+                                },
+                              }
+                                            });
+                                            message.From = botAccount;
+                                            message.Recipient = userAccount;
+                                            message.Conversation = new ConversationAccount(id: conversationId.Id);
+                                            message.AttachmentLayout = AttachmentLayoutTypes.Carousel;
+                                            message.Text = "Znalazłem więcej niż jedną odpowiedź pasującą do Twojego pytania. Sprawdź w podpowiedziach czy jest odpowiedź na Twoje pytanie lub wyślij pytanie do Nas. Odpowiem najszybciej jak to możliwe :)";
+
+                                            await connector.Conversations.SendToConversationAsync((Activity)message);
+
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            BaseDB.AddToLog("Błąd wysywania informacji o sklepie: " + ex);
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    var wyszukiwarka = BaseGETMethod.GetCardsAttachmentsWyszukiwarka(ref hrefList, false, activity.Text);
+                                    if (wyszukiwarka.Count() > 0)
+                                    {
+                                        ConnectorClient connector = new ConnectorClient(new Uri(activity.ServiceUrl));
+                                        var userAccount = new ChannelAccount(name: activity.From.Name, id: activity.From.Id);
+                                        var botAccount = new ChannelAccount(name: activity.Recipient.Name, id: activity.Recipient.Id);
+                                        connector = new ConnectorClient(new Uri(activity.ServiceUrl));
+                                        var conversationId = await connector.Conversations.CreateDirectConversationAsync(botAccount, userAccount);
+                                        IMessageActivity message = Activity.CreateMessageActivity();
+                                        message.ChannelData = JObject.FromObject(new
+                                        {
+                                            notification_type = "REGULAR",
+
+                                            quick_replies = new dynamic[]
+                                   {
+                                                                                                new
+                                {
+                                    content_type = "text",
+                                    title = "Wydarzenia",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Aktualnosci",
+                                    //     image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                 //   image_url = "http://archiwum.koluszki.pl/zdjecia/naglowki_nowe/listopad%202013/pi%C5%82ka[1].png"
+                                },
+                                new
+                                {
+                                    content_type = "text",
+                                    title = "Nowości/Promocje",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Promocje",
+                                //       image_url = "https://www.samo-lepky.sk/data/11/hokej5.png"
+                                },
+                                                                new
+                                {
+                                    content_type = "text",
+                                    title = "Kultura i Sztuka",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_KulturaSztuka",
+                                //       image_url = "https://www.samo-lepky.sk/data/11/hokej5.png"
+                                },
+                                new
+                                {
+                                    content_type = "text",
+                                    title = "Rozrywka",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Rozrywka",
+                                },
+                              }
+                                        });
+
+                                        message.From = botAccount;
+                                        message.Recipient = userAccount;
+                                        message.Conversation = new ConversationAccount(id: conversationId.Id);
+                                        message.AttachmentLayout = AttachmentLayoutTypes.Carousel;
+
+                                        message.Attachments = wyszukiwarka;
+                                        // message.Text = "Niestety nie znalazłem informacji na ten temat. Skorzystaj z podpowiedzi.";
+
+                                        await connector.Conversations.SendToConversationAsync((Activity)message);
+                                    }
+                                    else
+                                    {
+
+                                        ConnectorClient connector = new ConnectorClient(new Uri(activity.ServiceUrl));
+                                        var userAccount = new ChannelAccount(name: activity.From.Name, id: activity.From.Id);
+                                        var botAccount = new ChannelAccount(name: activity.Recipient.Name, id: activity.Recipient.Id);
+                                        BaseDB.dodajNowaWiadomosc(activity.Text, userAccount.Id, userAccount.Name);
+                                        connector = new ConnectorClient(new Uri(activity.ServiceUrl));
+                                        var conversationId = await connector.Conversations.CreateDirectConversationAsync(botAccount, userAccount);
+                                        IMessageActivity message = Activity.CreateMessageActivity();
+                                        message.ChannelData = JObject.FromObject(new
+                                        {
+                                            notification_type = "REGULAR",
+
+                                            quick_replies = new dynamic[]
+                                   {
+                                                                                                new
+                                {
+                                    content_type = "text",
+                                    title = "Wydarzenia",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Aktualnosci",
+                                    //     image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                 //   image_url = "http://archiwum.koluszki.pl/zdjecia/naglowki_nowe/listopad%202013/pi%C5%82ka[1].png"
+                                },
+                                new
+                                {
+                                    content_type = "text",
+                                    title = "Nowości/Promocje",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Promocje",
+                                //       image_url = "https://www.samo-lepky.sk/data/11/hokej5.png"
+                                },
+                                                                new
+                                {
+                                    content_type = "text",
+                                    title = "Kultura i Sztuka",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_KulturaSztuka",
+                                //       image_url = "https://www.samo-lepky.sk/data/11/hokej5.png"
+                                },
+                                new
+                                {
+                                    content_type = "text",
+                                    title = "Rozrywka",
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Rozrywka",
+                                },
+                              }
+                                        });
+
+                                        message.From = botAccount;
+                                        message.Recipient = userAccount;
+                                        message.Conversation = new ConversationAccount(id: conversationId.Id);
+                                        message.AttachmentLayout = AttachmentLayoutTypes.Carousel;
+
+
+
+                                        message.Text = "Niestety nie znalazłem informacji na ten temat. Twoja wiadomość została przekazana do konsultatna.W niedługim czasie spodziewaj się opowiedzi. Tymaczasem możesz skorzystać z naszych propozycji.";
+
+                                        await connector.Conversations.SendToConversationAsync((Activity)message);
+                                    }
+                                }
+                            }
+
+                        }
+                        
                     }
                 }
-
                 else
                 {
                     HandleSystemMessage(activity);
@@ -422,7 +1051,7 @@ Zaznacz tylko w rozwijanym menu lub skorzystaj z podpowiedzi, która sekcja cię
             }
             catch (Exception ex)
             {
-                BaseDB.AddToLog("Wysylanie wiadomosci: " + ex.ToString());
+                BaseDB.AddToLog("Wysylanie wiadomosci: " + ex.InnerException.ToString());
             }
             var response = Request.CreateResponse(HttpStatusCode.OK);
             return response;
@@ -561,6 +1190,364 @@ Zaznacz tylko w rozwijanym menu lub skorzystaj z podpowiedzi, która sekcja cię
 
 
 
+        public async static void CreateAnkieta(DataTable dtAnkieta, string fromId)
+        {
+            try
+            {
+                BaseDB.AddToLog("Wywołanie metody CreateAnkieta");
+
+                string uzytkownik = "";
+                DataTable dt = BaseGETMethod.GetUser();
+
+                MicrosoftAppCredentials.TrustServiceUrl(@"https://facebook.botframework.com", DateTime.MaxValue);
+
+                IMessageActivity message = Activity.CreateMessageActivity();
+
+                try
+                {
+                    if (dtAnkieta.Rows.Count >= 3)
+                    {
+
+                        message.ChannelData = JObject.FromObject(new
+                        {
+                            notification_type = "REGULAR",
+
+                            quick_replies = new dynamic[]
+      {
+
+                                new
+                                {
+                                    content_type = "text",
+                                    title = dtAnkieta.Rows[0]["Odpowiedz1"].ToString(),
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Odpowiedz1_"+dtAnkieta.Rows[0]["ID"],
+                                    //     image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                   // image_url = "http://archiwum.koluszki.pl/zdjecia/naglowki_nowe/listopad%202013/pi%C5%82ka[1].png"
+                                },
+                                new
+                                {
+                                    content_type = "text",
+                                    title = dtAnkieta.Rows[0]["Odpowiedz2"].ToString(),
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Odpowiedz2_"+dtAnkieta.Rows[0]["ID"],
+                           //         image_url = "https://gim7bytom.edupage.org/global/pics/iconspro/sport/volleyball.png"
+                                },                                new
+                                {
+                                    content_type = "text",
+                                    title = dtAnkieta.Rows[0]["Odpowiedz3"].ToString(),
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Odpowiedz3_"+dtAnkieta.Rows[0]["ID"],
+                                //       image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                },
+
+
+
+                                     }
+                        });
+
+                        message.AttachmentLayout = null;
+
+                        message.Text = dtAnkieta.Rows[0]["Tresc"].ToString();
+                        for (int i = 0; i < dt.Rows.Count; i++)
+                        {
+                            try
+                            {
+                                if (fromId != dt.Rows[i]["UserId"].ToString())
+                                {
+
+                                    var userAccount = new ChannelAccount(name: dt.Rows[i]["UserName"].ToString(), id: dt.Rows[i]["UserId"].ToString());
+                                    uzytkownik = userAccount.Name;
+                                    var botAccount = new ChannelAccount(name: dt.Rows[i]["BotName"].ToString(), id: dt.Rows[i]["BotId"].ToString());
+                                    var connector = new ConnectorClient(new Uri(dt.Rows[i]["Url"].ToString()), "39d46c3f-67d1-4cd1-b5b6-89ec124abf63", "6AnFsopfzqcb4reBLJpKMUB");
+                                    var conversationId = await connector.Conversations.CreateDirectConversationAsync(botAccount, userAccount);
+                                    message.From = botAccount;
+                                    message.Recipient = userAccount;
+                                    message.Conversation = new ConversationAccount(id: conversationId.Id, isGroup: false);
+                                    //await connector.Conversations.SendToConversationAsync((Activity)message).ConfigureAwait(false);
+
+                                    var returne = await connector.Conversations.SendToConversationAsync((Activity)message);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                BaseDB.AddToLog("Błąd wysyłania wiadomości do: " + uzytkownik + " " + ex.ToString());
+                            }
+                        }
+                    }
+                    else if (dtAnkieta.Rows.Count == 4)
+                    {
+
+                        message.ChannelData = JObject.FromObject(new
+                        {
+                            notification_type = "REGULAR",
+
+                            quick_replies = new dynamic[]
+      {
+
+                                new
+                                {
+                                    content_type = "text",
+                                    title = dtAnkieta.Rows[0]["Odpowiedz1"].ToString(),
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Odpowiedz1_"+dtAnkieta.Rows[0]["ID"],
+                                    //     image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                   // image_url = "http://archiwum.koluszki.pl/zdjecia/naglowki_nowe/listopad%202013/pi%C5%82ka[1].png"
+                                },
+                                new
+                                {
+                                    content_type = "text",
+                                    title = dtAnkieta.Rows[0]["Odpowiedz2"].ToString(),
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Odpowiedz2_"+dtAnkieta.Rows[0]["ID"],
+                           //         image_url = "https://gim7bytom.edupage.org/global/pics/iconspro/sport/volleyball.png"
+                                },                                new
+                                {
+                                    content_type = "text",
+                                    title = dtAnkieta.Rows[0]["Odpowiedz3"].ToString(),
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Odpowiedz3_"+dtAnkieta.Rows[0]["ID"],
+                                //       image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                },
+
+                                                               new
+                                {
+                                    content_type = "text",
+                                    title = dtAnkieta.Rows[0]["Odpowiedz4"].ToString(),
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Odpowiedz4_"+dtAnkieta.Rows[0]["ID"],
+                                //       image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                },
+
+                                     }
+                        });
+
+                        message.AttachmentLayout = null;
+
+                        message.Text = dtAnkieta.Rows[0]["Tresc"].ToString();
+                        for (int i = 0; i < dt.Rows.Count; i++)
+                        {
+                            try
+                            {
+                                if (fromId != dt.Rows[i]["UserId"].ToString())
+                                {
+
+                                    var userAccount = new ChannelAccount(name: dt.Rows[i]["UserName"].ToString(), id: dt.Rows[i]["UserId"].ToString());
+                                    uzytkownik = userAccount.Name;
+                                    var botAccount = new ChannelAccount(name: dt.Rows[i]["BotName"].ToString(), id: dt.Rows[i]["BotId"].ToString());
+                                    var connector = new ConnectorClient(new Uri(dt.Rows[i]["Url"].ToString()), "39d46c3f-67d1-4cd1-b5b6-89ec124abf63", "6AnFsopfzqcb4reBLJpKMUB");
+                                    var conversationId = await connector.Conversations.CreateDirectConversationAsync(botAccount, userAccount);
+                                    message.From = botAccount;
+                                    message.Recipient = userAccount;
+                                    message.Conversation = new ConversationAccount(id: conversationId.Id, isGroup: false);
+                                    //await connector.Conversations.SendToConversationAsync((Activity)message).ConfigureAwait(false);
+
+                                    var returne = await connector.Conversations.SendToConversationAsync((Activity)message);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                BaseDB.AddToLog("Błąd wysyłania wiadomości do: " + uzytkownik + " " + ex.ToString());
+                            }
+                        }
+                    }
+                    else if (dtAnkieta.Rows.Count == 5)
+                    {
+                        message.ChannelData = JObject.FromObject(new
+                        {
+                            notification_type = "REGULAR",
+
+                            quick_replies = new dynamic[]
+      {
+
+                                new
+                                {
+                                    content_type = "text",
+                                    title = dtAnkieta.Rows[0]["Odpowiedz1"].ToString(),
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Odpowiedz1_"+dtAnkieta.Rows[0]["ID"],
+                                    //     image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                   // image_url = "http://archiwum.koluszki.pl/zdjecia/naglowki_nowe/listopad%202013/pi%C5%82ka[1].png"
+                                },
+                                new
+                                {
+                                    content_type = "text",
+                                    title = dtAnkieta.Rows[0]["Odpowiedz2"].ToString(),
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Odpowiedz2_"+dtAnkieta.Rows[0]["ID"],
+                           //         image_url = "https://gim7bytom.edupage.org/global/pics/iconspro/sport/volleyball.png"
+                                },                                new
+                                {
+                                    content_type = "text",
+                                    title = dtAnkieta.Rows[0]["Odpowiedz3"].ToString(),
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Odpowiedz3_"+dtAnkieta.Rows[0]["ID"],
+                                //       image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                },
+
+                                                               new
+                                {
+                                    content_type = "text",
+                                    title = dtAnkieta.Rows[0]["Odpowiedz4"].ToString(),
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Odpowiedz4_"+dtAnkieta.Rows[0]["ID"],
+                                //       image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                },
+                                                                                            new
+                                {
+                                    content_type = "text",
+                                    title = dtAnkieta.Rows[0]["Odpowiedz5"].ToString(),
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Odpowiedz5_"+dtAnkieta.Rows[0]["ID"],
+                                //       image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                },
+
+                                     }
+                        });
+
+                        message.AttachmentLayout = null;
+
+                        message.Text = dtAnkieta.Rows[0]["Tresc"].ToString();
+                        for (int i = 0; i < dt.Rows.Count; i++)
+                        {
+                            try
+                            {
+                                if (fromId != dt.Rows[i]["UserId"].ToString())
+                                {
+
+                                    var userAccount = new ChannelAccount(name: dt.Rows[i]["UserName"].ToString(), id: dt.Rows[i]["UserId"].ToString());
+                                    uzytkownik = userAccount.Name;
+                                    var botAccount = new ChannelAccount(name: dt.Rows[i]["BotName"].ToString(), id: dt.Rows[i]["BotId"].ToString());
+                                    var connector = new ConnectorClient(new Uri(dt.Rows[i]["Url"].ToString()), "39d46c3f-67d1-4cd1-b5b6-89ec124abf63", "6AnFsopfzqcb4reBLJpKMUB");
+                                    var conversationId = await connector.Conversations.CreateDirectConversationAsync(botAccount, userAccount);
+                                    message.From = botAccount;
+                                    message.Recipient = userAccount;
+                                    message.Conversation = new ConversationAccount(id: conversationId.Id, isGroup: false);
+                                    //await connector.Conversations.SendToConversationAsync((Activity)message).ConfigureAwait(false);
+
+                                    var returne = await connector.Conversations.SendToConversationAsync((Activity)message);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                BaseDB.AddToLog("Błąd wysyłania wiadomości do: " + uzytkownik + " " + ex.ToString());
+                            }
+                        }
+                    }
+                    else
+                    {
+                        message.ChannelData = JObject.FromObject(new
+                        {
+                            notification_type = "REGULAR",
+
+                            quick_replies = new dynamic[]
+      {
+
+                                new
+                                {
+                                    content_type = "text",
+                                    title = dtAnkieta.Rows[0]["Odpowiedz1"].ToString(),
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Odpowiedz1_"+dtAnkieta.Rows[0]["ID"],
+                                    //     image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                   // image_url = "http://archiwum.koluszki.pl/zdjecia/naglowki_nowe/listopad%202013/pi%C5%82ka[1].png"
+                                },
+                                new
+                                {
+                                    content_type = "text",
+                                    title = dtAnkieta.Rows[0]["Odpowiedz2"].ToString(),
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Odpowiedz2_"+dtAnkieta.Rows[0]["ID"],
+                           //         image_url = "https://gim7bytom.edupage.org/global/pics/iconspro/sport/volleyball.png"
+                                },                                new
+                                {
+                                    content_type = "text",
+                                    title = dtAnkieta.Rows[0]["Odpowiedz3"].ToString(),
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Odpowiedz3_"+dtAnkieta.Rows[0]["ID"],
+                                //       image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                },
+
+                                                               new
+                                {
+                                    content_type = "text",
+                                    title = dtAnkieta.Rows[0]["Odpowiedz4"].ToString(),
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Odpowiedz4_"+dtAnkieta.Rows[0]["ID"],
+                                //       image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                },
+                                                                                            new
+                                {
+                                    content_type = "text",
+                                    title = dtAnkieta.Rows[0]["Odpowiedz5"].ToString(),
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Odpowiedz5_"+dtAnkieta.Rows[0]["ID"],
+                                //       image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                },
+                                                                                                                         new
+                                {
+                                    content_type = "text",
+                                    title = dtAnkieta.Rows[0]["Odpowiedz6"].ToString(),
+                                    payload = "DEVELOPER_DEFINED_PAYLOAD_Odpowiedz6_"+dtAnkieta.Rows[0]["ID"],
+                                //       image_url = "https://cdn3.iconfinder.com/data/icons/developperss/PNG/Green%20Ball.png"
+                                },
+
+                                     }
+                        });
+
+                        message.AttachmentLayout = null;
+
+                        message.Text = dtAnkieta.Rows[0]["Tresc"].ToString();
+                        for (int i = 0; i < dt.Rows.Count; i++)
+                        {
+                            try
+                            {
+                                if (fromId != dt.Rows[i]["UserId"].ToString())
+                                {
+
+                                    var userAccount = new ChannelAccount(name: dt.Rows[i]["UserName"].ToString(), id: dt.Rows[i]["UserId"].ToString());
+                                    uzytkownik = userAccount.Name;
+                                    var botAccount = new ChannelAccount(name: dt.Rows[i]["BotName"].ToString(), id: dt.Rows[i]["BotId"].ToString());
+                                    var connector = new ConnectorClient(new Uri(dt.Rows[i]["Url"].ToString()), "39d46c3f-67d1-4cd1-b5b6-89ec124abf63", "6AnFsopfzqcb4reBLJpKMUB");
+                                    var conversationId = await connector.Conversations.CreateDirectConversationAsync(botAccount, userAccount);
+                                    message.From = botAccount;
+                                    message.Recipient = userAccount;
+                                    message.Conversation = new ConversationAccount(id: conversationId.Id, isGroup: false);
+                                    //await connector.Conversations.SendToConversationAsync((Activity)message).ConfigureAwait(false);
+
+                                    var returne = await connector.Conversations.SendToConversationAsync((Activity)message);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                BaseDB.AddToLog("Błąd wysyłania wiadomości do: " + uzytkownik + " " + ex.ToString());
+                            }
+                        }
+                    }
+
+
+                    message.AttachmentLayout = null;
+
+
+                    message.Text = dtAnkieta.Rows[0]["Tresc"].ToString();
+                    for (int i = 0; i < dt.Rows.Count; i++)
+                    {
+                        try
+                        {
+                            if (fromId != dt.Rows[i]["UserId"].ToString())
+                            {
+
+                                var userAccount = new ChannelAccount(name: dt.Rows[i]["UserName"].ToString(), id: dt.Rows[i]["UserId"].ToString());
+                                uzytkownik = userAccount.Name;
+                                var botAccount = new ChannelAccount(name: dt.Rows[i]["BotName"].ToString(), id: dt.Rows[i]["BotId"].ToString());
+                                var connector = new ConnectorClient(new Uri(dt.Rows[i]["Url"].ToString()), "39d46c3f-67d1-4cd1-b5b6-89ec124abf63", "6AnFsopfzqcb4reBLJpKMUB");
+                                var conversationId = await connector.Conversations.CreateDirectConversationAsync(botAccount, userAccount);
+                                message.From = botAccount;
+                                message.Recipient = userAccount;
+                                message.Conversation = new ConversationAccount(id: conversationId.Id, isGroup: false);
+                                //await connector.Conversations.SendToConversationAsync((Activity)message).ConfigureAwait(false);
+
+                                var returne = await connector.Conversations.SendToConversationAsync((Activity)message);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            BaseDB.AddToLog("Błąd wysyłania wiadomości do: " + uzytkownik + " " + ex.ToString());
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    BaseDB.AddToLog("Błąd wysyłania wiadomości do: " + uzytkownik + " " + ex.ToString());
+                }
+            }
+            catch (Exception ex)
+            {
+                BaseDB.AddToLog("Błąd wysłania wiadomosci: " + ex.ToString());
+            }
+        }
 
 
         private Activity HandleSystemMessage(Activity message)
@@ -592,12 +1579,6 @@ Zaznacz tylko w rozwijanym menu lub skorzystaj z podpowiedzi, która sekcja cię
             }
             return null;
         }
+}
 
-
-
-
-
-
-
-    }
 }
